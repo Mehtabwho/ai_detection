@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useToast } from '../utils/toast'
 import api from '../utils/api'
@@ -25,36 +25,86 @@ export default function Assessment() {
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const { showToast } = useToast()
 
+  // Optional: fetch a general assessment on mount for guests
+  // This useEffect now includes the logic to only show the toast once.
+  useEffect(() => {
+    const fetchGeneralAssessment = async () => {
+      const token = localStorage.getItem('token')
+      const guestNotificationShown = localStorage.getItem('guestAssessmentNotified')
+
+      // Only proceed if user is NOT logged in AND notification hasn't been shown
+      if (!token && !guestNotificationShown) {
+        try {
+          const response = await api.get('/risk/assessment') // GET route
+          
+          if (response.data.success) {
+            showToast('Guest assessment available. Fill the form for full assessment!', 'info')
+            
+            // Set the flag in localStorage so the toast doesn't show again
+            localStorage.setItem('guestAssessmentNotified', 'true')
+          }
+        } catch (error: any) {
+          console.error('Error fetching general assessment:', error)
+        }
+      }
+    }
+
+    fetchGeneralAssessment()
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      const response = await api.post('/risk/assess', {
-        age: parseInt(formData.age),
-        gender: formData.gender,
-        systolicBP: parseInt(formData.systolicBP),
-        diastolicBP: parseInt(formData.diastolicBP),
-        cholesterol: parseFloat(formData.cholesterol),
-        diabetes: formData.diabetes
-      })
+      const token = localStorage.getItem('token')
+
+      if (!token) {
+        // Guest user: send their input to get a personalized AI summary
+        const response = await api.post('/risk/assessment/guest', {
+          age: parseInt(formData.age),
+          gender: formData.gender,
+          systolicBP: parseInt(formData.systolicBP),
+          diastolicBP: parseInt(formData.diastolicBP),
+          cholesterol: parseFloat(formData.cholesterol),
+          diabetes: formData.diabetes
+        })
       
-      if (response.data.success && response.data.data) {
-        setResult(response.data.data)
-        showToast('Assessment completed successfully!', 'success')
-        // Optionally redirect to dashboard after a delay
-        setTimeout(() => {
-          // Keep them on the page to see results, but they can navigate to dashboard
-        }, 2000)
+        if (response.data.success && response.data.data) {
+          setResult({
+            id: response.data.data.id,
+            riskScore: response.data.data.riskScore,
+            summary: response.data.data.summary,
+            createdAt: response.data.data.createdAt
+          })
+          showToast('AI-generated guest assessment based on your input!', 'success')
+        }
+      
       } else {
-        throw new Error('Invalid response format')
+        // Logged-in user: POST assessment to save in DB
+        const response = await api.post('/risk/assessment', {
+          age: parseInt(formData.age),
+          gender: formData.gender,
+          systolicBP: parseInt(formData.systolicBP),
+          diastolicBP: parseInt(formData.diastolicBP),
+          cholesterol: parseFloat(formData.cholesterol),
+          diabetes: formData.diabetes
+        })
+
+        if (response.data.success && response.data.data) {
+          setResult(response.data.data)
+          showToast('Assessment completed successfully!', 'success')
+        } else {
+          throw new Error('Invalid response from server')
+        }
       }
     } catch (error: any) {
       console.error('Error in assessment:', error)
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.errors?.[0]?.msg || 
-                          error.message || 
-                          'Assessment failed. Please check if the backend server is running.'
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.errors?.[0]?.msg ||
+        error.message ||
+        'Assessment failed. Please check if the backend server is running.'
       showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
@@ -85,6 +135,7 @@ export default function Assessment() {
             className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 md:p-8"
           >
             <div className="grid md:grid-cols-2 gap-6">
+              {/* Age */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Age *
@@ -100,6 +151,7 @@ export default function Assessment() {
                 />
               </div>
 
+              {/* Gender */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Gender *
@@ -107,7 +159,9 @@ export default function Assessment() {
                 <select
                   required
                   value={formData.gender}
-                  onChange={(e) => setFormData({ ...formData, gender: e.target.value as 'Male' | 'Female' | 'Other' })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, gender: e.target.value as 'Male' | 'Female' | 'Other' })
+                  }
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="Male">Male</option>
@@ -116,6 +170,7 @@ export default function Assessment() {
                 </select>
               </div>
 
+              {/* Systolic BP */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Systolic BP (mmHg) *
@@ -131,6 +186,7 @@ export default function Assessment() {
                 />
               </div>
 
+              {/* Diastolic BP */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Diastolic BP (mmHg) *
@@ -146,6 +202,7 @@ export default function Assessment() {
                 />
               </div>
 
+              {/* Cholesterol */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Cholesterol (mg/dL) *
@@ -161,6 +218,7 @@ export default function Assessment() {
                 />
               </div>
 
+              {/* Diabetes */}
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -169,7 +227,10 @@ export default function Assessment() {
                   onChange={(e) => setFormData({ ...formData, diabetes: e.target.checked })}
                   className="w-5 h-5 text-primary-600 rounded border-gray-300"
                 />
-                <label htmlFor="diabetes" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label
+                  htmlFor="diabetes"
+                  className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
                   I have diabetes
                 </label>
               </div>
@@ -212,4 +273,3 @@ export default function Assessment() {
     </div>
   )
 }
-

@@ -35,7 +35,7 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <Heart className="w-20 h-20 mx-auto mb-6 text-primary-600" fill="currentColor" />
+            <Heart className="w-20 h-20 mx-auto mb-6 text-primary-600" fill="red" />
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 dark:text-white mb-4">
               HridSync
             </h1>

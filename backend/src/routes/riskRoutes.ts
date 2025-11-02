@@ -2,69 +2,174 @@ import express, { Request, Response } from 'express'
 import { body, validationResult } from 'express-validator'
 import RiskAssessment from '../models/RiskAssessment'
 import { generateRiskSummary } from '../utils/aiService'
-import { authenticate } from '../middleware/auth'
+import { authenticate, authenticateOptional } from '../middleware/auth'
 
 const router = express.Router()
 
-router.post('/assess', authenticate, [
-  body('age').isInt({ min: 1, max: 150 }).withMessage('Age must be between 1 and 150'),
-  body('gender').isIn(['Male', 'Female', 'Other']).withMessage('Invalid gender'),
-  body('systolicBP').isInt({ min: 50, max: 250 }).withMessage('Systolic BP must be between 50 and 250'),
-  body('diastolicBP').isInt({ min: 30, max: 200 }).withMessage('Diastolic BP must be between 30 and 200'),
-  body('cholesterol').isFloat({ min: 0 }).withMessage('Cholesterol must be a positive number'),
-  body('diabetes').isBoolean().withMessage('Diabetes must be a boolean value')
-], async (req: Request, res: Response) => {
+/**
+ * GET /assessment
+ * Public route: works for both guests and logged-in users
+ * (Default general AI assessment for guests)
+ */
+router.get('/assessment', authenticateOptional, async (req: Request, res: Response) => {
   try {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() })
+    const { userId, userEmail } = req
+
+    const defaultData = {
+      age: 40,
+      gender: 'Male',
+      systolicBP: 130,
+      diastolicBP: 85,
+      cholesterol: 200,
+      diabetes: false
     }
 
-    const { age, gender, systolicBP, diastolicBP, cholesterol, diabetes } = req.body
+    const { riskScore, summary } = await generateRiskSummary(defaultData)
 
-    // Generate AI risk assessment
-    const { riskScore, summary } = await generateRiskSummary({
-      age,
-      gender,
-      systolicBP,
-      diastolicBP,
-      cholesterol,
-      diabetes
-    })
-
-    // Save to database
-    const assessment = new RiskAssessment({
-      userId: req.userId!,
-      age,
-      gender,
-      systolicBP,
-      diastolicBP,
-      cholesterol,
-      diabetes,
-      riskScore,
-      aiSummary: summary
-    })
-
-    await assessment.save()
-
-    res.status(201).json({
+    return res.json({
       success: true,
+      message: userId
+        ? `Personalized assessment for ${userEmail}.`
+        : 'General AI-generated assessment for guest.',
       data: {
-        id: assessment._id,
+        id: (userId ? 'temp-' : 'guest-') + Date.now(),
         riskScore,
         summary,
-        createdAt: assessment.createdAt
+        createdAt: new Date().toISOString()
       }
     })
-  } catch (error: any) {
-    console.error('Error in risk assessment:', error)
-    res.status(500).json({
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({
       success: false,
-      message: 'Error processing risk assessment',
-      error: error.message
+      message: 'Something went wrong while fetching AI assessment.'
     })
   }
 })
 
-export default router
+/**
+ * POST /assessment
+ * Protected route: only for logged-in users (saved in DB)
+ */
+router.post(
+  '/assessment',
+  authenticate,
+  [
+    body('age').isInt({ min: 1, max: 150 }),
+    body('gender').isIn(['Male', 'Female', 'Other']),
+    body('systolicBP').isInt({ min: 50, max: 250 }),
+    body('diastolicBP').isInt({ min: 30, max: 200 }),
+    body('cholesterol').isFloat({ min: 0 }),
+    body('diabetes').isBoolean()
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() })
+    }
 
+    try {
+      const { userId } = req
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' })
+      }
+
+      const { age, gender, systolicBP, diastolicBP, cholesterol, diabetes } = req.body
+
+      // Generate AI summary
+      const { riskScore, summary } = await generateRiskSummary({
+        age,
+        gender,
+        systolicBP,
+        diastolicBP,
+        cholesterol,
+        diabetes
+      })
+
+      // Save to DB
+      const newAssessment = await RiskAssessment.create({
+        userId,
+        age,
+        gender,
+        systolicBP,
+        diastolicBP,
+        cholesterol,
+        diabetes,
+        riskScore,
+        aiSummary: summary
+      })
+
+      return res.json({
+        success: true,
+        message: 'Assessment saved successfully.',
+        data: {
+          id: newAssessment._id,
+          riskScore: newAssessment.riskScore,
+          summary: newAssessment.aiSummary,
+          createdAt: newAssessment.createdAt,
+        },
+      })
+    } catch (err) {
+      console.error(err)
+      return res.status(500).json({
+        success: false,
+        message: 'Error generating or saving assessment.'
+      })
+    }
+  }
+)
+
+/**
+ * POST /assessment/guest
+ * Public route: personalized assessment for guest input (not saved in DB)
+ */
+router.post(
+  '/assessment/guest',
+  [
+    body('age').isInt({ min: 1, max: 150 }),
+    body('gender').isIn(['Male', 'Female', 'Other']),
+    body('systolicBP').isInt({ min: 50, max: 250 }),
+    body('diastolicBP').isInt({ min: 30, max: 200 }),
+    body('cholesterol').isFloat({ min: 0 }),
+    body('diabetes').isBoolean()
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() })
+    }
+
+    try {
+      const { age, gender, systolicBP, diastolicBP, cholesterol, diabetes } = req.body
+
+      // Generate AI summary for guest input
+      const { riskScore, summary } = await generateRiskSummary({
+        age,
+        gender,
+        systolicBP,
+        diastolicBP,
+        cholesterol,
+        diabetes
+      })
+
+      return res.json({
+        success: true,
+        message: 'Guest AI assessment generated successfully.',
+        data: {
+          id: 'guest-' + Date.now(),
+          riskScore,
+          summary,
+          createdAt: new Date().toISOString()
+        }
+      })
+    } catch (err) {
+      console.error('Error generating guest assessment:', err)
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate guest AI assessment.'
+      })
+    }
+  }
+)
+
+export default router

@@ -144,7 +144,7 @@ export default function Progress() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <TrendingUp className="w-16 h-16 mx-auto mb-4 text-primary-600" />
+          <TrendingUp className="w-16 h-16 mx-auto mb-4 text-primary-600" color="red" />
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Your Progress
           </h1>

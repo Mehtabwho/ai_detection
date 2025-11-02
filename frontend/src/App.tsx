@@ -5,6 +5,7 @@ import { AuthProvider } from './utils/auth'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import ProtectedRoute from './components/ProtectedRoute'
+import ScrollToTop from './components/ScrollToTop' // 👈 ADD THIS
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -22,6 +23,7 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <Router>
+            <ScrollToTop /> {/* 👈 ADD THIS LINE */}
             <div className="min-h-screen flex flex-col bg-white dark:bg-gray-900">
               <Navbar />
               <main className="flex-grow">
@@ -29,6 +31,7 @@ function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+
                   <Route
                     path="/dashboard"
                     element={
@@ -37,14 +40,9 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
-                  <Route
-                    path="/assessment"
-                    element={
-                      <ProtectedRoute>
-                        <Assessment />
-                      </ProtectedRoute>
-                    }
-                  />
+
+                  <Route path="/assessment" element={<Assessment />} />
+
                   <Route
                     path="/diet"
                     element={
@@ -53,9 +51,20 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+
                   <Route path="/chat" element={<Chat />} />
-                  <Route path="/doctors" element={<Doctors />} />
+
+                  <Route
+                    path="/doctors"
+                    element={
+                      <ProtectedRoute>
+                        <Doctors />
+                      </ProtectedRoute>
+                    }
+                  />
+
                   <Route path="/premium" element={<Premium />} />
+
                   <Route
                     path="/progress"
                     element={
@@ -76,4 +85,3 @@ function App() {
 }
 
 export default App
-

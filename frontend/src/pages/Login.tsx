@@ -36,7 +36,7 @@ export default function Login() {
         className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8"
       >
         <div className="text-center mb-8">
-          <Heart className="w-16 h-16 mx-auto mb-4 text-primary-600" fill="currentColor" />
+          <Heart className="w-16 h-16 mx-auto mb-4 text-primary-600" fill="red" />
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Welcome Back
           </h1>
